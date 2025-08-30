@@ -15,6 +15,10 @@ app.use(express.json());
 app.use("/api/admin", adminRouter);
 app.use("/api/users", userRouter);
 
+app.get("/", (req, res) => {
+  res.send("Api is healthy and working!");
+});
+
 app.listen(process.env.PORT, () => {
   console.log(`Server is running on port ${process.env.PORT}`);
 });
