@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 import {generateToken} from "../middlewares/middleware.js";
 import User from "../models/user.models.js";
 import Article from "../models/article.models.js";
@@ -16,6 +17,14 @@ export const registerUser = async (req, res) => {
       });
     }
 
+    // Password strength validation
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters long",
+      });
+    }
+
     // Check if user already exists
     const existingUser = await User.findOne({
       $or: [{email}, {username}],
@@ -28,11 +37,15 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    // Create user (store password as plain text since you're using JWT)
+    // Hash password
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Create user with hashed password
     const user = new User({
       username,
       email,
-      password, // Store password as is (you mentioned no bcrypt)
+      password: hashedPassword,
     });
 
     await user.save();
@@ -79,8 +92,9 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // Verify password (simple comparison since no bcrypt)
-    if (password !== user.password) {
+    // Verify password using bcrypt
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
         message: "Invalid credentials",
@@ -104,6 +118,64 @@ export const loginUser = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error during login",
+      error: error.message,
+    });
+  }
+};
+
+// Optional: Change password endpoint
+export const changePassword = async (req, res) => {
+  try {
+    const {currentPassword, newPassword} = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password and new password are required",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters long",
+      });
+    }
+
+    // Find user
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isCurrentPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: "Current password is incorrect",
+      });
+    }
+
+    // Hash new password
+    const saltRounds = 12;
+    const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update password
+    user.password = hashedNewPassword;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Password changed successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Server error during password change",
       error: error.message,
     });
   }
